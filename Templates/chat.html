@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chatbot with Voice</title>
+    
+        <!-- <link rel="stylesheet" href="static\bootstrap.min.css"> -->
+        <link rel="stylesheet" href="static\style.css">
+      <!-- <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            background: #f0f2f5;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 800px;
+            height: 90vh;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 5px 30px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .chat-header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        #chat-box {
+            flex-grow: 1;
+            padding: 25px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            max-width: 70%;
+            padding: 12px 18px;
+            border-radius: 15px;
+            line-height: 1.4;
+            position: relative;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .message.user {
+            background: #007bff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.bot {
+            background: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #eee;
+        }
+
+        #user-input {
+            flex-grow: 1;
+            padding: 12px 18px;
+            border: 1px solid #e0e0e0;
+            border-radius: 25px;
+            outline: none;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        #user-input:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+        }
+
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+
+        #record-btn {
+            background: #28a745;
+            padding: 12px;
+        }
+
+        #record-btn:hover {
+            background: #218838;
+        }
+
+        audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style> -->
+    <!-- /* </style> */ -->
+</head>
+<body>
+    
+
+    <div class="chat-container">
+       
+        <div class="chat-header">
+            <h1>Chat Assistant</h1>
+            <div class="status-indicator"></div>
+            <span>Online</span>
+        </div>
+        <div id="chat-box"></div>
+        <!-- Update bagian input container -->
+        <div class="input-container">
+            <input type="text" id="user-input" placeholder="Ketik pesan atau tekan tombol mikrofon...">
+            <button onclick="sendText()">Kirim</button>
+            <button id="record-btn" class="record-btn" onclick="toggleRecording()">
+                <span class="icon">🎤</span>
+            </button>
+        </div>
+        <audio id="audio-player" controls></audio>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+
+        // Update fungsi startRecording dan stopRecording
+        let isRecording = false;
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const formData = new FormData();
+                    formData.append('audio', audioBlob, 'recording.wav');
+                    
+                    try {
+                        // Tampilkan status loading
+                        document.getElementById('record-btn').innerHTML = '⏳';
+                        
+                        const response = await fetch('/voice', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const data = await response.json();
+                        
+                        if(data.error) {
+                            throw new Error(data.error);
+                        }
+                        
+                        displayMessage(data.text, 'bot');
+                        const audioPlayer = document.getElementById('audio-player');
+                        audioPlayer.src = data.audio;
+                        audioPlayer.play().catch(error => {
+                            console.error('Audio play failed:', error);
+                            alert('Gagal memutar audio. Silakan coba lagi.');
+                        });
+                        
+                    } catch (error) {
+                        console.error('Error:', error);
+                        displayMessage(`Error: ${error.message}`, 'error');
+                    } finally {
+                        document.getElementById('record-btn').innerHTML = '🎤';
+                    }
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                document.getElementById('record-btn').innerHTML = '⏺️';
+                document.getElementById('record-btn').classList.add('recording');
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                alert('Akses mikrofon diperlukan untuk fitur ini!');
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                document.getElementById('record-btn').innerHTML = '🎤';
+                document.getElementById('record-btn').classList.remove('recording');
+            }
+        }
+
+        async function sendText() {
+            const input = document.getElementById('user-input');
+            const message = input.value;
+            input.value = '';
+            
+            displayMessage(message, 'user');
+            
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                const data = await response.json();
+                displayMessage(data.response, 'bot');
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        function displayMessage(message, sender) {
+            const chatBox = document.getElementById('chat-box');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            messageDiv.textContent = message;
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
