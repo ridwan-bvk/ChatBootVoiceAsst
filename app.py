@@ -6,94 +6,64 @@ import os
 import torch
 import logging
 from datetime import datetime
+import google.generativeai as genai
+from dotenv import load_dotenv
+# Load environment variables
+load_dotenv() 
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/audio'
 
-# Load LLM model (Ganti dengan model yang diinginkan) [1]
-tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-medium")
-model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-medium")
+print(os.path.abspath('.env'))  
+print("API Key:", os.getenv('GOOGLE_API_KEY')) 
 
-# IndoGPT (Ganti di bagian inisialisasi model)
-# tokenizer = AutoTokenizer.from_pretrained("Wikidepia/IndoGPT-LTS")
-# model = AutoModelForCausalLM.from_pretrained("Wikidepia/IndoGPT-LTS")
-
-# Atau
-# tokenizer = AutoTokenizer.from_pretrained("Indonesia-ai/gpt2-medium-indonesian-522M")
-# model = AutoModelForCausalLM.from_pretrained("Indonesia-ai/gpt2-medium-indonesian-522M")
-        
-
-# Inisialisasi speech recognizer
+# Konfigurasi Gemini API
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')  # Atau langsung masukkan API key di sini
+print(f"api key:{GEMINI_API_KEY}")
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-2.0-flash')
 r = sr.Recognizer()
 
-[1]
-def generate_response(input_text):
-    """Generate response menggunakan LLM"""
+
+# Atau menggunakan DeepSeek API (Alternatif)
+# Daftar di https://platform.deepseek.com/signup
+# DEEPSEEK_API_KEY = "your_api_key_here"
+
+def generate_response(prompt):
+    """Menggunakan Google Gemini API"""
     try:
-        # Encode input dengan return_attention_mask=True
-        inputs = tokenizer(
-            input_text + tokenizer.eos_token, 
-            return_tensors='pt',
-            return_attention_mask=True  # ← Solusi utama
+        response = model.generate_content(
+            f"Berikan jawaban dalam Bahasa sunda dan informatif: {prompt}"
+            
         )
-        
-        # Ambil input_ids dan attention_mask
-        input_ids = inputs["input_ids"]
-        attention_mask = inputs["attention_mask"]
-        
-        # Tambahkan attention_mask ke generate()
-        output = model.generate(
-            input_ids,
-            attention_mask=attention_mask,  # ← Tambahkan ini
-            max_length=1000,
-            pad_token_id=tokenizer.eos_token_id,
-            no_repeat_ngram_size=3,
-            do_sample=True,
-            top_k=100,
-            top_p=0.7,
-            temperature=0.8
-        )
-        
-        # IndoGPT (Ganti di bagian inisialisasi model)
-        # tokenizer = AutoTokenizer.from_pretrained("Wikidepia/IndoGPT-LTS")
-        # model = AutoModelForCausalLM.from_pretrained("Wikidepia/IndoGPT-LTS")
-
-        # # Atau
-        # tokenizer = AutoTokenizer.from_pretrained("Indonesia-ai/gpt2-medium-indonesian-522M")
-        # model = AutoModelForCausalLM.from_pretrained("Indonesia-ai/gpt2-medium-indonesian-522M")
-        
-        response = tokenizer.decode(output[:, input_ids.shape[-1]:][0], skip_special_tokens=True)
-        return response
+        return response.text
     except Exception as e:
-        return "Maaf, terjadi kesalahan dalam memproses permintaan Anda."
+        return f"Maaf terjadi error: {str(e)}"
 
-
-# def generate_response(input_text):
-#     system_prompt = "Anda adalah asisten yang membantu pengguna dalam bahasa Indonesia. Berikan jawaban yang ramah dan informatif."
-#     full_text = system_prompt + "\n\nUser: " + input_text + "\nAsisten:"
+# Alternatif menggunakan DeepSeek API
+"""
+def generate_response(prompt):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+    }
     
-#     inputs = tokenizer(
-#         input_text + tokenizer.eos_token, 
-#         return_tensors='pt',
-#         max_length=512,
-#         truncation=True
-#     )
+    data = {
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "model": "deepseek-chat",
+        "temperature": 0.7
+    }
     
-#     # Parameter yang lebih optimal untuk percakapan
-#     output = model.generate(
-#         inputs.input_ids,
-#         attention_mask=inputs.attention_mask,
-#         max_new_tokens=100,
-#         repetition_penalty=1.2,  # Mengurangi pengulangan
-#         temperature=0.7,         # Lebih deterministik (0.1-1.0)
-#         top_k=50,                # Filter vocabulary
-#         top_p=0.9,               # Nucleus sampling
-#         do_sample=True,
-#         pad_token_id=tokenizer.eos_token_id
-#     )
+    response = requests.post(
+        "https://api.deepseek.com/v1/chat/completions",
+        headers=headers,
+        json=data
+    )
     
-#     response = tokenizer.decode(output[0], skip_special_tokens=True)
-#     return response.split(tokenizer.eos_token)[-1].strip()  # Ambil bagian terakhir
+    return response.json()['choices'][0]['message']['content']
+"""
 
 @app.route('/')
 def home():
